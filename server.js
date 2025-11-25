@@ -7,7 +7,7 @@ const app = express();
 
 // CORS Configuration
 const allowedOrigins = [
-    'https://share-it-frontend.onrender.com',
+    'https://krptrips.onrender.com',
     'http://localhost:3000',
     'http://localhost:5173',
     'http://localhost:5500',
