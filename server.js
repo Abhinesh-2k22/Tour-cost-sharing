@@ -4,6 +4,14 @@ const cors = require('cors');
 require('dotenv').config();
 
 const app = express();
+// Ping endpoint for monitoring services
+app.get('/api/ping', (req, res) => {
+  res.status(200).json({ 
+    status: 'ok', 
+    message: 'Backend is running',
+    timestamp: new Date().toISOString()
+  });
+});
 
 // CORS Configuration
 const allowedOrigins = [
@@ -87,14 +95,7 @@ mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/share-it'
   console.error('MongoDB connection error:', error);
 });
 
-// Ping endpoint for monitoring services
-app.get('/api/ping', (req, res) => {
-  res.status(200).json({ 
-    status: 'ok', 
-    message: 'Backend is running',
-    timestamp: new Date().toISOString()
-  });
-});
+
 
 // Config endpoint - serves API URL from environment
 app.get('/api/config', (req, res) => {
@@ -110,7 +111,7 @@ app.use('/api/groups', require('./routes/groups'));
 app.use('/api/families', require('./routes/families'));
 app.use('/api/expenses', require('./routes/expenses'));
 
-const PORT =  5000;
+const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
   console.log(`Server is running on port ${PORT}`);
 }); 
