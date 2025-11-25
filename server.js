@@ -13,6 +13,10 @@ app.get('/api/ping', (req, res) => {
   });
 });
 
+app.head('/api/ping', (req, res) => {
+  res.status(200).end();
+});
+
 // CORS Configuration
 const allowedOrigins = [
     'https://krptrips.onrender.com',
