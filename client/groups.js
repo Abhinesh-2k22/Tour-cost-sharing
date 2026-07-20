@@ -1,4 +1,4 @@
-const API_URL = 'https://krp-expense-backend.onrender.com/api';
+const API_URL = window.ENV.API_URL;
 
 const groupListEl = document.getElementById('groupList');
 const createCardEl = document.getElementById('createGroupCard');

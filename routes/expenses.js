@@ -56,11 +56,22 @@ router.post('/', async (req, res) => {
       return res.status(400).json({ message: 'Family does not exist in this group.' });
     }
 
+    if (req.body.splitBetween && Array.isArray(req.body.splitBetween) && req.body.splitBetween.length > 0) {
+      const validFamilies = await Family.find({
+        name: { $in: req.body.splitBetween },
+        group: group._id
+      });
+      if (validFamilies.length !== req.body.splitBetween.length) {
+        return res.status(400).json({ message: 'One or more families in splitBetween do not exist in this group.' });
+      }
+    }
+
     const expense = new Expense({
       description: req.body.description,
       amount: req.body.amount,
       familyName: req.body.familyName,
-      group: group._id
+      group: group._id,
+      splitBetween: Array.isArray(req.body.splitBetween) ? req.body.splitBetween : []
     });
 
     const newExpense = await expense.save();
@@ -82,22 +93,43 @@ router.get('/settlements', async (req, res) => {
     // Calculate total members and total expenses
     const totalMembers = families.reduce((sum, family) => sum + family.members, 0);
     const totalExpenses = expenses.reduce((sum, expense) => sum + expense.amount, 0);
-    const perPersonShare = totalMembers > 0 ? totalExpenses / totalMembers : 0;
 
-    // Calculate each family's share and what they paid
-    const familyBalances = families.map((family) => {
-      const familyShare = perPersonShare * family.members;
-      const familyPaid = expenses
-        .filter(expense => expense.familyName === family.name)
-        .reduce((sum, expense) => sum + expense.amount, 0);
-      
-      return {
-        family: family.name,
-        members: family.members,
-        share: familyShare,
-        paid: familyPaid,
-        balance: familyPaid - familyShare
+    const familyBalancesMap = {};
+    families.forEach(f => {
+      familyBalancesMap[f.name] = {
+        family: f.name,
+        members: f.members,
+        share: 0,
+        paid: 0,
+        balance: 0
       };
+    });
+
+    expenses.forEach(expense => {
+      if (familyBalancesMap[expense.familyName]) {
+        familyBalancesMap[expense.familyName].paid += expense.amount;
+      }
+
+      let splitFamilies = [];
+      if (expense.splitBetween && expense.splitBetween.length > 0) {
+        splitFamilies = families.filter(f => expense.splitBetween.includes(f.name));
+      } else {
+        splitFamilies = families;
+      }
+
+      const expenseTotalMembers = splitFamilies.reduce((sum, f) => sum + f.members, 0);
+      const perPersonShare = expenseTotalMembers > 0 ? expense.amount / expenseTotalMembers : 0;
+
+      splitFamilies.forEach(f => {
+        if (familyBalancesMap[f.name]) {
+          familyBalancesMap[f.name].share += (perPersonShare * f.members);
+        }
+      });
+    });
+
+    const familyBalances = Object.values(familyBalancesMap).map(f => {
+      f.balance = f.paid - f.share;
+      return f;
     });
 
     // Calculate settlements
@@ -130,7 +162,6 @@ router.get('/settlements', async (req, res) => {
     res.json({
       totalExpenses,
       totalMembers,
-      perPersonShare,
       familyBalances,
       settlements
     });
@@ -157,7 +188,7 @@ router.patch('/:id', async (req, res) => {
     }
 
     const updates = {};
-    const { amount, familyName } = req.body;
+    const { amount, familyName, splitBetween } = req.body;
 
     if (amount !== undefined) {
       const parsedAmount = Number(amount);
@@ -173,6 +204,19 @@ router.patch('/:id', async (req, res) => {
         return res.status(400).json({ message: 'Family does not exist.' });
       }
       updates.familyName = familyName;
+    }
+
+    if (splitBetween !== undefined) {
+      if (Array.isArray(splitBetween) && splitBetween.length > 0) {
+        const validFamilies = await Family.find({
+          name: { $in: splitBetween },
+          group: group._id
+        });
+        if (validFamilies.length !== splitBetween.length) {
+          return res.status(400).json({ message: 'One or more families in splitBetween do not exist in this group.' });
+        }
+      }
+      updates.splitBetween = Array.isArray(splitBetween) ? splitBetween : [];
     }
 
     if (Object.keys(updates).length === 0) {

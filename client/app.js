@@ -1,4 +1,4 @@
-const API_URL = 'https://krp-expense-backend.onrender.com/api';
+const API_URL = window.ENV.API_URL;
 
 const urlParams = new URLSearchParams(window.location.search);
 const activeGroupId = urlParams.get('groupId');
@@ -169,21 +169,46 @@ async function loadFamilies() {
 
 function renderFamilyOptions() {
     const select = document.getElementById('familyName');
+    const splitContainer = document.getElementById('splitBetweenContainer');
     if (!select) return;
 
     if (!families.length) {
         select.innerHTML = '<option value="">Add a family first</option>';
         select.disabled = true;
+        if (splitContainer) {
+            splitContainer.innerHTML = '<li><span class="dropdown-item text-muted">Add a family first</span></li>';
+        }
         return;
     }
 
     const currentValue = select.value;
     select.disabled = false;
-    select.innerHTML = families.map(family => `
+    
+    const optionsHtml = families.map(family => `
         <option value="${family.name}">
             ${formatFamilyLabel(family.name)} (${family.members} members)
         </option>
     `).join('');
+    
+    select.innerHTML = optionsHtml;
+
+    if (splitContainer) {
+        const checkboxes = splitContainer.querySelectorAll('input[type="checkbox"]');
+        const currentSplitValues = Array.from(checkboxes).filter(cb => cb.checked).map(cb => cb.value);
+            
+        splitContainer.innerHTML = families.map(family => `
+            <li>
+                <label class="dropdown-item mb-0" for="split_${family._id}">
+                    <div class="form-check mb-0">
+                        <input class="form-check-input split-between-cb" type="checkbox" value="${family.name}" id="split_${family._id}" ${currentSplitValues.includes(family.name) ? 'checked' : ''}>
+                        <span class="form-check-label w-100">
+                            ${formatFamilyLabel(family.name)}
+                        </span>
+                    </div>
+                </label>
+            </li>
+        `).join('');
+    }
 
     const hasCurrent = families.some(family => family.name === currentValue);
     select.value = hasCurrent ? currentValue : families[0].name;
@@ -400,6 +425,9 @@ async function loadExpenses() {
 function renderExpenseRow(expense) {
     const formattedDate = new Date(expense.date).toLocaleString();
     const familyLabel = formatFamilyLabel(expense.familyName);
+    const splitBetweenLabel = (!expense.splitBetween || expense.splitBetween.length === 0) 
+        ? 'All' 
+        : expense.splitBetween.map(f => formatFamilyLabel(f)).join(', ');
     const actionsHtml = isGroupReadOnly
         ? '<span class="badge bg-secondary">Locked</span>'
         : `
@@ -411,17 +439,28 @@ function renderExpenseRow(expense) {
         <tr class="expense-edit-row d-none" data-edit-row-for="${expense._id}">
             <td colspan="5">
                 <form class="expense-edit-form row g-2 align-items-end" data-expense-id="${expense._id}">
-                    <div class="col-md-4">
+                    <div class="col-md-3">
                         <label class="form-label mb-1">Amount</label>
                         <input type="number" class="form-control form-control-sm" name="amount" value="${expense.amount}" min="0" step="0.01" required>
                     </div>
-                    <div class="col-md-4">
-                        <label class="form-label mb-1">Family</label>
+                    <div class="col-md-3">
+                        <label class="form-label mb-1">Paid By</label>
                         <select class="form-select form-select-sm" name="familyName" required>
                             ${renderFamilyChoiceOptions(expense.familyName)}
                         </select>
                     </div>
-                    <div class="col-md-4 d-flex gap-2">
+                    <div class="col-md-3">
+                        <label class="form-label mb-1">Split Between</label>
+                        <div class="dropdown">
+                            <button class="form-control form-control-sm text-start dropdown-toggle bg-white" type="button" data-bs-toggle="dropdown" aria-expanded="false" data-bs-auto-close="outside">
+                                Select families
+                            </button>
+                            <ul class="dropdown-menu w-100 p-2">
+                                ${renderSplitCheckboxOptions(expense.splitBetween || [])}
+                            </ul>
+                        </div>
+                    </div>
+                    <div class="col-md-3 d-flex gap-2">
                         <button type="submit" class="btn btn-sm btn-success flex-fill">Save</button>
                         <button type="button" class="btn btn-sm btn-outline-secondary flex-fill cancel-expense-edit" data-expense-id="${expense._id}">Cancel</button>
                     </div>
@@ -436,6 +475,7 @@ function renderExpenseRow(expense) {
             <td>${expense.description}</td>
             <td>${formatCurrency(expense.amount)}</td>
             <td>${familyLabel}</td>
+            <td>${splitBetweenLabel}</td>
             <td class="text-end">${actionsHtml}</td>
         </tr>
         ${editRow}
@@ -456,6 +496,24 @@ function renderFamilyChoiceOptions(selectedFamily) {
     `).join('');
 }
 
+function renderSplitCheckboxOptions(selectedFamilies) {
+    if (!families.length) return '<li><span class="dropdown-item text-muted">Add a family first</span></li>';
+    return families.map(family => {
+        const randId = Math.random().toString(36).substr(2, 9);
+        return `
+        <li>
+            <label class="dropdown-item mb-0" for="edit_split_${randId}">
+                <div class="form-check mb-0">
+                    <input class="form-check-input edit-split-cb" type="checkbox" value="${family.name}" id="edit_split_${randId}" ${selectedFamilies.includes(family.name) ? 'checked' : ''}>
+                    <span class="form-check-label w-100">
+                        ${formatFamilyLabel(family.name)}
+                    </span>
+                </div>
+            </label>
+        </li>
+    `}).join('');
+}
+
 // Settlements
 async function loadSettlements() {
     try {
@@ -467,7 +525,6 @@ async function loadSettlements() {
                 <h4 style="font-size: 1.1rem;">Summary</h4>
                 <p class="mb-1">Total Expenses: ${formatCurrency(data.totalExpenses)}</p>
                 <p class="mb-1">Total Members: ${data.totalMembers}</p>
-                <p class="mb-1">Per Person Share: ${formatCurrency(data.perPersonShare)}</p>
             </div>
             <div class="mb-3">
                 <h4 style="font-size: 1.1rem;">Family Balances</h4>
@@ -539,10 +596,14 @@ document.getElementById('expenseForm').addEventListener('submit', async (e) => {
         Adding...
     `;
 
+    const checkedBoxes = document.querySelectorAll('#splitBetweenContainer .split-between-cb:checked');
+    const splitBetween = Array.from(checkedBoxes).map(cb => cb.value);
+
     const payload = {
         description: document.getElementById('description').value,
         amount: parseFloat(document.getElementById('amount').value),
         familyName: document.getElementById('familyName').value,
+        splitBetween: splitBetween,
         groupId: activeGroupId
     };
 
@@ -764,6 +825,8 @@ document.addEventListener('submit', async (e) => {
     const expenseId = form.dataset.expenseId;
     const amountInput = form.querySelector('input[name="amount"]');
     const familySelect = form.querySelector('select[name="familyName"]');
+    const checkedBoxes = form.querySelectorAll('.edit-split-cb:checked');
+    const splitBetween = Array.from(checkedBoxes).map(cb => cb.value);
 
     if (!window.confirm('Update this expense?')) return;
 
@@ -775,7 +838,8 @@ document.addEventListener('submit', async (e) => {
     try {
         const payload = {
             amount: parseFloat(amountInput.value),
-            familyName: familySelect.value
+            familyName: familySelect.value,
+            splitBetween: splitBetween
         };
 
         const response = await fetch(`${API_URL}/expenses/${expenseId}`, {

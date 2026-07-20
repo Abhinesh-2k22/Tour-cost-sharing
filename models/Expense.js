@@ -20,6 +20,10 @@ const ExpenseSchema = new mongoose.Schema({
     ref: 'Group',
     required: true
   },
+  splitBetween: [{
+    type: String,
+    trim: true
+  }],
   date: {
     type: Date,
     default: Date.now
