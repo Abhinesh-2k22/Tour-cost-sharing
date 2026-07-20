@@ -5,6 +5,14 @@ require('dotenv').config();
 
 const app = express();
 // Ping endpoint for monitoring services
+app.get('/', (req, res) => {
+  res.status(200).json({ 
+    status: 'ok', 
+    message: 'Backend is running',
+    timestamp: new Date().toISOString()
+  });
+});
+
 app.get('/api/ping', (req, res) => {
   res.status(200).json({ 
     status: 'ok', 
