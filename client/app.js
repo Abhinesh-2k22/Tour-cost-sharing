@@ -571,6 +571,31 @@ async function loadSettlements() {
         `;
 
         document.getElementById('settlements').innerHTML = settlementsHtml;
+
+        // Populate family spending summary table
+        const spendingBody = document.getElementById('familySpendingBody');
+        if (spendingBody) {
+            if (!data.familyBalances || data.familyBalances.length === 0) {
+                spendingBody.innerHTML = `<tr><td colspan="5" class="text-center text-muted">No data yet.</td></tr>`;
+            } else {
+                spendingBody.innerHTML = data.familyBalances.map(balance => {
+                    const isOwed = balance.balance >= 0;
+                    const balanceText = isOwed
+                        ? `+ ${formatCurrency(balance.balance)}`
+                        : `- ${formatCurrency(Math.abs(balance.balance))}`;
+                    const balanceClass = isOwed ? 'text-success fw-semibold' : 'text-danger fw-semibold';
+                    return `
+                        <tr>
+                            <td>${formatFamilyLabel(balance.family)}</td>
+                            <td>${balance.members}</td>
+                            <td class="text-end">${formatCurrency(balance.paid)}</td>
+                            <td class="text-end">${formatCurrency(balance.share)}</td>
+                            <td class="text-end ${balanceClass}">${balanceText}</td>
+                        </tr>
+                    `;
+                }).join('');
+            }
+        }
     } catch (error) {
         console.error('Error loading settlements:', error);
     }
@@ -872,7 +897,9 @@ let resizeTimeout;
 window.addEventListener('resize', () => {
     clearTimeout(resizeTimeout);
     resizeTimeout = setTimeout(() => {
-        if (dailyChart) {
+        // Don't reload if the user is actively editing an expense — it would wipe the open edit row
+        const hasOpenEditRow = document.querySelector('.expense-edit-row:not(.d-none)');
+        if (dailyChart && !hasOpenEditRow) {
             loadExpenses();
         }
     }, 250);
